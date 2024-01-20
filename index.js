@@ -1,14 +1,31 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
+import dotenv from 'dotenv';
+import express, { urlencoded, static as st } from 'express';
+import cors from 'cors';
+import URLModel from './models/url.model.js';
+
 const app = express();
+dotenv.config();
+// Database Connection
+import mongoose from "mongoose";
+
+const uri = process.env.ATLAS_URI || "";
+
+async function connect() {
+  try {
+    await mongoose.connect(uri);
+    console.log("Connected to MongoDB");
+  } catch (error) {
+    console.error(error);
+  }
+}
+connect();
 
 // Basic Configuration
 const port = process.env.PORT || 3000;
-app.use(express.urlencoded({ extended: true }));
+app.use(urlencoded({ extended: true }));
 app.use(cors());
 
-app.use('/public', express.static(`${process.cwd()}/public`));
+app.use('/public', st(`${process.cwd()}/public`));
 
 app.get('/', function (req, res) {
   res.sendFile(process.cwd() + '/views/index.html');
@@ -36,32 +53,38 @@ const validateURL = (url) => {
   }
 }
 
-const urlDB = []
+var Database = [];
 
-app.post('/api/shorturl', (req, res) => {
+app.post('/api/shorturl', async (req, res) => {
+  if (!validateURL(req.body.url)) return res.json({ error: "invalid url" }); // invalid URL
 
-  if (!validateURL(req.body.url)) return res.json({ error: "invalid url" }); // Url validation
-
-  let urlExistsInDatabase = urlDB.find((e) => e.original_url === req.body.url) ? true : false; // url query to assess if it exists in db
+  let urlExistsInDatabase = await Database.find((e) => e.original_url === req.body.url); // url query to assess if it exists in db
 
   if (urlExistsInDatabase) {
-    return res.json(urlDB.find((e) => e.original_url = req.body.url));
+    return res.json(Database.find((e) => e.original_url = req.body.url));
   } else {
 
-    let index = urlDB.length;
-    urlDB.push({
-      original_url: req.body.url,
-      short_url: `https://boilerplate-project-urlshortener.ayosafacundo.repl.co/api/shorturl/` + parseInt(index)
+    let index = Database.length;
+    Database.push({
+      original_url: `https://${req.body.url}`,
+      short_url: `localhost:${port}/api/shorturl/` + parseInt(index)
     });
 
-    return res.json(urlDB[index]);
+    return res.json(Database[index]);
   }
 });
 
+app.get('/urls', (req, res) => {
+  res.json({ Database });
+})
+
 app.get('/api/shorturl/:url', (req, res) => {
-  let urlExistsInDatabase = urlDB.find((e) => e.short_url === parseInt(req.params.url)) ? true : false;
+  let urlExistsInDatabase = Database.find((e) => e.short_url === `localhost:${port}/api/shorturl/` + parseInt(req.params.url));
+  console.log(urlExistsInDatabase);
   if (urlExistsInDatabase) {
-    res.redirect(urlDB.find((e) => e.short_url === parseInt(req.params.url)).original_url);
+    res.writeHead(302, {
+      location: urlExistsInDatabase.original_url
+    });
   }
   res.json({
     "error": "Invalid Shorturl"
